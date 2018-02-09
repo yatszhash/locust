@@ -1,3 +1,4 @@
+import argparse
 import inspect
 import logging
 import os
@@ -5,9 +6,12 @@ import signal
 import socket
 import sys
 import time
+from datetime import datetime
 from optparse import OptionParser
+from pathlib import Path
 
 import gevent
+import yaml
 
 import locust
 
@@ -368,6 +372,18 @@ def load_locustfile(path):
     return imported.__doc__, locusts
 
 def main():
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument('--config_file', '-z', required=False, type=str, dest="config_file")
+
+    try:
+        args = arg_parser.parse_args()
+
+        if "config_file" in vars(args):
+            config_path = Path(args.config_file)
+            parse_config(config_path)
+    except:
+        pass
+
     parser, options, arguments = parse_options()
 
     # setup logging
@@ -519,6 +535,50 @@ def main():
         shutdown(code=code)
     except KeyboardInterrupt as e:
         shutdown(0)
+
+def parse_config(config_path):
+    with config_path.open(encoding="utf-8") as f:
+        config = yaml.load(f)
+    locust_config = config["locust"]
+    sys.argv = [sys.argv[0]]
+
+    map_to_sysarg(locust_config)
+
+def map_to_sysarg(locust_config):
+    # TODO support all options
+    if "n_request" in locust_config:
+        sys.argv.append("-n")
+        sys.argv.append(str(locust_config["n_request"]))
+
+    if locust_config["no_web"]:
+        sys.argv.append("--no-web")
+
+        sys.argv.append("-c")
+        sys.argv.append(str(locust_config["n_client"]))
+
+        sys.argv.append("-r")
+        sys.argv.append(str(locust_config["hatch_rate"]))
+
+    if "logfile" in locust_config:
+        logfile_path = locust_config["logfile"]
+        Path(logfile_path).parent.mkdir(parents=True, exist_ok=True)
+
+        sys.argv.append("--logfile")
+        sys.argv.append(logfile_path)
+
+    if "csv" in locust_config:
+        csv_path = locust_config["csv"]
+        Path(csv_path).parent.mkdir(parents=True, exist_ok=True)
+
+        sys.argv.append("--csv")
+        sys.argv.append(locust_config["csv"])
+
+    if "host" in locust_config:
+        sys.argv.append("--host")
+        sys.argv.append(locust_config["host"])
+
+    sys.argv.append("-f")
+    sys.argv.append(locust_config["locust_file"])
 
 if __name__ == '__main__':
     main()

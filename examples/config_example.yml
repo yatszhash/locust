@@ -1,0 +1,10 @@
+
+locust:
+  locust_file: "examples/basic.py"
+  logfile: "log/test.log"
+  csv: "log/test.csv"
+  n_client: 3
+  hatch_rate: 1
+#  n_request: 10
+  no_web: true
+  host: "http://127.0.0.1:9001"
