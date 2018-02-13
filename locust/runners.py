@@ -11,6 +11,7 @@ import gevent
 import six
 from gevent import GreenletExit
 from gevent.pool import Group
+from locust.core import IdentifiableLocust
 
 from six.moves import xrange
 
@@ -205,6 +206,66 @@ class LocalLocustRunner(LocustRunner):
     def start_hatching(self, locust_count=None, hatch_rate=None, wait=False):
         self.hatching_greenlet = gevent.spawn(lambda: super(LocalLocustRunner, self).start_hatching(locust_count, hatch_rate, wait=wait))
         self.greenlet = self.hatching_greenlet
+
+
+class IdentifiableLocalLocustRunner(LocalLocustRunner):
+
+    def __init__(self, locust_classes, options, user_opts):
+        super().__init__(locust_classes, options)
+        self.user_opts = user_opts
+
+    def spawn_locusts(self, spawn_count=None, stop_timeout=None, wait=False):
+        if spawn_count is None:
+            spawn_count = self.num_clients
+
+        bucket = self.weight_locusts(spawn_count, stop_timeout)
+        spawn_count = len(bucket)
+
+        if spawn_count > len(self.user_opts):
+            raise Exception(
+                "spawn count and the number of user options must be same. spawn count: {}, user options: {}".format(
+                    spawn_count, self.user_opts))
+
+        if self.state == STATE_INIT or self.state == STATE_STOPPED:
+            self.state = STATE_HATCHING
+            self.num_clients = spawn_count
+        else:
+            self.num_clients += spawn_count
+
+        logger.info("Hatching and swarming %i clients at the rate %g clients/s..." % (spawn_count, self.hatch_rate))
+        occurence_count = dict([(l.__name__, 0) for l in self.locust_classes])
+
+        def hatch():
+            sleep_time = 1.0 / self.hatch_rate
+            while True:
+                if not bucket:
+                    logger.info("All locusts hatched: %s" % ", ".join(
+                        ["%s: %d" % (name, count) for name, count in six.iteritems(occurence_count)]))
+                    events.hatch_complete.fire(user_count=self.num_clients)
+                    return
+
+                locust = bucket.pop(random.randint(0, len(bucket) - 1))
+                user_opt = self.user_opts.pop(random.randint(0, len(self.user_opts) - 1))
+                occurence_count[locust.__name__] += 1
+
+                def start_locust(_):
+                    try:
+                        if issubclass(locust , IdentifiableLocust):
+                            locust(user_opt).run()
+                        else:
+                            locust().run()
+                    except GreenletExit:
+                        pass
+
+                new_locust = self.locusts.spawn(start_locust, locust)
+                if len(self.locusts) % 10 == 0:
+                    logger.debug("%i locusts hatched" % len(self.locusts))
+                gevent.sleep(sleep_time)
+
+        hatch()
+        if wait:
+            self.locusts.join()
+            logger.info("All locusts dead\n")
 
 class DistributedLocustRunner(LocustRunner):
     def __init__(self, locust_classes, options):

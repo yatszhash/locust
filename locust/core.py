@@ -111,6 +111,12 @@ class Locust(object):
             six.reraise(LocustError, LocustError("A task inside a Locust class' main TaskSet (`%s.task_set` of type `%s`) seems to have called interrupt() or raised an InterruptTaskSet exception. The interrupt() function is used to hand over execution to a parent TaskSet, and should never be called in the main TaskSet which a Locust class' task_set attribute points to." % (type(self).__name__, self.task_set.__name__)), sys.exc_info()[2])
 
 
+class IdentifiableLocust(Locust):
+
+    def __init__(self, user_opt):
+        super().__init__()
+        self.user_opt = user_opt
+
 class HttpLocust(Locust):
     """
     Represents an HTTP "user" which is to be hatched and attack the system that is to be load tested.

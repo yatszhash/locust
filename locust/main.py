@@ -15,7 +15,7 @@ from . import events, runners, web
 from .core import HttpLocust, Locust
 from .inspectlocust import get_task_ratio_dict, print_task_ratio
 from .log import console_logger, setup_logging
-from .runners import LocalLocustRunner, MasterLocustRunner, SlaveLocustRunner
+from .runners import LocalLocustRunner, MasterLocustRunner, SlaveLocustRunner, IdentifiableLocalLocustRunner
 from .stats import (print_error_report, print_percentile_stats, print_stats,
                     stats_printer, stats_writer, write_stat_csvs)
 from .util.time import parse_timespan
@@ -367,7 +367,7 @@ def load_locustfile(path):
     locusts = dict(filter(is_locust, vars(imported).items()))
     return imported.__doc__, locusts
 
-def main():
+def main(user_opts=None):
     parser, options, arguments = parse_options()
 
     # setup logging
@@ -452,7 +452,10 @@ def main():
         main_greenlet = gevent.spawn(web.start, locust_classes, options)
     
     if not options.master and not options.slave:
-        runners.locust_runner = LocalLocustRunner(locust_classes, options)
+        if user_opts:
+            runners.locust_runner = IdentifiableLocalLocustRunner(locust_classes, options, user_opts)
+        else:
+            runners.locust_runner = LocalLocustRunner(locust_classes, options)
         # spawn client spawning/hatching greenlet
         if options.no_web:
             runners.locust_runner.start_hatching(wait=True)
